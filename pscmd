@@ -1,0 +1,2 @@
+#!/usr/bin/bash
+ps o pid,ppid,pgrp,uname,cmd
