@@ -69,7 +69,7 @@ void parseIntoCmds(char * job, cmdList cmdlist[MAXCMDSPERJOB])
       token = strtok(NULL, "|");
       i++;
    }
-   if (i > 1) cmdlist[i-1].pipe = pipe;
+   if (i >= 1) cmdlist[i-1].pipe = pipe;
 
    //command arguments are separate by whitespace
    for (i = 0; cmdlist[i].filled == 1; i++)

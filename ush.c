@@ -20,6 +20,9 @@ int main()
    char commandline[MAXLINE];
    int bytes;
 
+   /* initialize the job list */
+   initJobs(jobs);
+
    /* These are the ones you will need to implement */
    Signal(SIGINT,  sigintHandler);    /* ctrl-c entered at ush prompt*/
    Signal(SIGCHLD, sigchildHandler);  /* Terminated child */
@@ -61,6 +64,8 @@ void evalCmdLine(char * cmdline)
    i = 0;
    while (joblist[i].filled == 1)
    {
+      //if the job starts with a built-in command like quit then
+      //don't evaluate it (builtin will evaluate it)
       if (!builtin(joblist[i].job))
       {
          evalJob(joblist[i].job, joblist[i].bg);
@@ -84,6 +89,7 @@ void evalJob(char * job, int bg)
    int pids[MAXPIDS] = {0};
    int cmdCnt;
    //parse the job into commands
+   //see parseIntoCmds documentation in parser.c
    cmdList cmdlist[MAXCMDSPERJOB];
    initCmdList(cmdlist);
    parseIntoCmds(job, cmdlist);
@@ -113,6 +119,12 @@ void evalJob(char * job, int bg)
  */
 int builtin(char * job) 
 {
+   //Parse the job into commands
+   cmdList cmdlist[MAXCMDSPERJOB];
+   initCmdList(cmdlist);
+   parseIntoCmds(job, cmdlist);
+
+
    return 0;
 }
 
@@ -132,10 +144,10 @@ void waitfg()
  * process. If the process is the foreground process, nothing is
  * printed in response.  However if the process is a background process,
  * it should print either:
- * pid killed
+ * jid killed
  * if the process terminated abnormally (for example, by a CTRL-C).
  * or
- * pid done
+ * jid done
  * if the process terminated normally. It will only print if the
  * job is finished.  The job is finished when all processes within the
  * job terminate.

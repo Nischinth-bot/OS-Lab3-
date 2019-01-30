@@ -60,7 +60,7 @@ int addJob(pid_t pid[MAXPIDS], int pgrp, int state,
          jobs[i].state = state;
          jobs[i].jid = nextjid++;
          if (nextjid > MAXJOBS) nextjid = 1;
-         strcpy(jobs[i].cmdline, cmdline);
+         strncpy(jobs[i].cmdline, cmdline, MAXLINE);
          if(verbose)
          {
             printf("Added job [%d] %s\n", jobs[i].jid, jobs[i].cmdline);
@@ -79,7 +79,7 @@ int addJob(pid_t pid[MAXPIDS], int pgrp, int state,
  */
 int deletePid(pid_t pid, jobT jobs[MAXJOBS])
 {
-   int i, j, found = 0, index;
+   int i, j, index = -1;
 
    if (pid < 1) return 0;
 
@@ -89,13 +89,13 @@ int deletePid(pid_t pid, jobT jobs[MAXJOBS])
       {
          if (jobs[i].pid[j] == pid) 
          { 
-            found = 1;
             jobs[i].pid[j] = 0;
             index = i;
+            break;
          }
       }
    }
-   if (found)
+   if (index != -1)
    {
       //see if all process that are part of this job have terminated
       for (j = 0; j < MAXPIDS; j++) if (jobs[index].pid[j] != 0) return 0;
