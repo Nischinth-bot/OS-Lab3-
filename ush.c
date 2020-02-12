@@ -1,3 +1,4 @@
+
 #include "wrappers.h"
 #include "parser.h"
 #include "jobs.h"
@@ -11,38 +12,41 @@ void evalCmdLine(char *cmdline);
 void evalJob(char * job, int bg);
 int builtin(char * job); 
 
+/**HELPER METHODS**/
+
+
 /* The main drives the shell process.  Basically a shell reads
  * input, handles the input by executing a command in the foreground
  * or background, and repeats. 
  */
 int main()
 {
-   char commandline[MAXLINE];
-   int bytes;
+    char commandline[MAXLINE];
+    int bytes;
 
-   /* initialize the job list */
-   initJobs(jobs);
+    /* initialize the job list */
+    initJobs(jobs);
 
-   /* These are the ones you will need to implement */
-   Signal(SIGINT,  sigintHandler);    /* ctrl-c entered at ush prompt*/
-   Signal(SIGCHLD, sigchildHandler);  /* Terminated child */
+    /* These are the ones you will need to implement */
+    Signal(SIGINT,  sigintHandler);    /* ctrl-c entered at ush prompt*/
+    Signal(SIGCHLD, sigchildHandler);  /* Terminated child */
 
-   printf("ush> ");
-   fflush(NULL);  //flush prompt
+    printf("ush> ");
+    fflush(NULL);  //flush prompt
 
-   bytes = read(0, commandline, MAXLINE - 1);
-   if (bytes > 0) commandline[bytes - 1] = '\0'; 
-   while (1) //quits in builtin
-   {
-      //if the number of bytes is 1 then the
-      //user simply entered a newline
-      if (bytes > 1) evalCmdLine(commandline);
-      printf("ush> ");
-      fflush(NULL);
-      bytes = read(0, commandline, MAXLINE - 1);
-      if (bytes > 0) commandline[bytes - 1] = '\0'; 
-   }
-   return 0;
+    bytes = read(0, commandline, MAXLINE - 1);
+    if (bytes > 0) commandline[bytes - 1] = '\0'; 
+    while (1) //quit in builtin
+    {
+        //if the number of bytes is 1 then the
+        //user simply entered a newline
+        if (bytes > 1) evalCmdLine(commandline);
+        printf("ush> ");
+        fflush(NULL);
+        bytes = read(0, commandline, MAXLINE - 1);
+        if (bytes > 0) commandline[bytes - 1] = '\0'; 
+    }
+    return 0;
 }      
 
 /* evalCmdLine
@@ -54,25 +58,25 @@ int main()
  */
 void evalCmdLine(char * cmdline)
 {
-   int i;
-   jobList joblist[MAXJOBSPERCMDLN];
+    int i;
+    jobList joblist[MAXJOBSPERCMDLN];
 
-   //Parse the command line into jobs
-   initJobList(joblist);
-   parseIntoJobs(cmdline, joblist);
+    //Parse the command line into jobs
+    initJobList(joblist);
+    parseIntoJobs(cmdline, joblist);
 
-   i = 0;
-   while (joblist[i].filled == 1)
-   {
-      //if the job starts with a built-in command like quit then
-      //don't evaluate it (builtin will evaluate it)
-      if (!builtin(joblist[i].job))
-      {
-         evalJob(joblist[i].job, joblist[i].bg);
-      }
-      i++;
-   }
-   return;
+    i = 0;
+    while (joblist[i].filled == 1)
+    {
+        //if the job starts with a built-in command like quit then
+        //don't evaluate it (builtin will evaluate it)
+        if (!builtin(joblist[i].job))
+        {
+            evalJob(joblist[i].job, joblist[i].bg);
+        }
+        i++;
+    }
+    return;
 }
 
 /******* You need to write these functions *********/
@@ -86,22 +90,41 @@ void evalCmdLine(char * cmdline)
 
 void evalJob(char * job, int bg)
 {
-   int pids[MAXPIDS] = {0};
-   int cmdCnt;
-   //parse the job into commands
-   //see parseIntoCmds documentation in parser.c
-   cmdList cmdlist[MAXCMDSPERJOB];
-   initCmdList(cmdlist);
-   parseIntoCmds(job, cmdlist);
-   //get the number of commands
-   cmdCnt = getCmdCount(cmdlist);
-
-   /* You'll need to execute a Fork and an Execvp for
-    * each command.  Before creating any children, block the 
-    * SIGINT and SIGCHLD signals.  This will allow you to 
-    * add the job to the job list before those signals are handled.
-    */
+    int pids[MAXPIDS] = {0};
+    int cmdCnt;
+    //parse the job into commands
+    //see parseIntoCmds documentation in parser.c
+    cmdList cmdlist[MAXCMDSPERJOB];
+    initCmdList(cmdlist);
+    parseIntoCmds(job, cmdlist);
+    //get the number of commands
+    cmdCnt = getCmdCount(cmdlist);
+    /* You'll need to execute a Fork and an Execvp for
+     * each command.  Before creating any children, block the 
+     * SIGINT and SIGCHLD signals.  This will allow you to 
+     * add the job to the job list before those signals are handled.
+     */
+    int i;
+    char* args = "";
+    for (i = 0; i <  cmdCnt; i ++) {
+        int pid = Fork();
+        if (pid == 0) {
+            char buffer[50];
+            strcpy(buffer, "/bin/");
+            strcat(buffer,cmdlist[i].args[0]);
+            int result = Execvp(buffer, cmdlist[i].args); 
+            exit(0);
+        }
+        pids[i] = pid;
+    }
+    for(i = 0; i < sizeof(pids); i ++)
+    {
+        int status;
+        Waitpid(pids[i], &status, 0);
+    }
 }
+
+
 
 /* builtin
  * Handles the builtin commands: jobs, quit, kill
@@ -111,21 +134,34 @@ void evalJob(char * job, int bg)
  * jobs - lists the jobs (calls listJobs)
  * kill - handles SIGKILL (-9) and SIGINT (-2) only
  *      - can provide a job number preceded by a %,
- *        a group pid preceded by a - or a pid,
- *        or a pid
+ *        a group pid preceded by a - or a pid
  *        kill -9 12345
  *        kill -2 %1
  *        kill -2 -12345
  */
 int builtin(char * job) 
 {
-   //Parse the job into commands
-   cmdList cmdlist[MAXCMDSPERJOB];
-   initCmdList(cmdlist);
-   parseIntoCmds(job, cmdlist);
-
-
-   return 0;
+    //Parse the job into commands
+    cmdList cmdlist[MAXCMDSPERJOB];
+    initCmdList(cmdlist);
+    parseIntoCmds(job, cmdlist);
+    int i;
+    for(i = 0; i < MAXCMDSPERJOB; i ++) {
+        if (strcmp(cmdlist[i].args[0],"quit") == 0 ) {
+            exit(0);
+            return 1;
+        }
+        if (strcmp(cmdlist[i].args[0],"jobs") == 0) {
+            listJobs(jobs);
+            return 1;
+        }
+        if (strcmp(cmdlist[i].args[0], "kill") == 0) {
+            int result = Execvp(cmdlist[i].args[0], cmdlist[i].args);
+            //kill(SIGKILL, pids[i]):
+            return 1;
+        }
+        return 0;
+    }
 }
 
 /* waitfg
@@ -135,6 +171,10 @@ int builtin(char * job)
  */
 void waitfg()
 {
+    while ( fgJob(jobs) != NULL ){
+        sleep(1);
+    }
+    return;
 }
 
 /*
@@ -151,7 +191,7 @@ void waitfg()
  * if the process terminated normally. It will only print if the
  * job is finished.  The job is finished when all processes within the
  * job terminate.
-*/
+ */
 void sigchildHandler(int sig)
 {
 }
@@ -165,6 +205,14 @@ void sigchildHandler(int sig)
  */
 void sigintHandler(int sig)
 {
-} 
-
+    int i;
+    for (i = 0; i < MAXJOBS; i ++) {
+        if(jobs[i].state == FG){
+            int j;
+            for (j = 0; j < MAXPIDS; j ++) {
+                kill(SIGINT, jobs[i].pid[j]);
+            }
+        }
+    }
+}
 
