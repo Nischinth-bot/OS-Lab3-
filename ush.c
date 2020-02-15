@@ -110,7 +110,9 @@ void evalJob(char * job, int bg)
         int pid = Fork();
         if (pid == 0) {
             char buffer[50];
-            strcpy(buffer, "/bin/");
+            if(!cmdlist[i].args[0][0] == '.' 
+                && !cmdlist[i].args[0][1] == '/'){ 
+            strcpy(buffer, "/bin/");}
             strcat(buffer,cmdlist[i].args[0]);
             int result = Execvp(buffer, cmdlist[i].args); 
             exit(0);
