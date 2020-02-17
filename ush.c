@@ -111,19 +111,28 @@ void evalJob(char * job, int bg)
         if (pid == 0) {
             char buffer[50];
             if(!cmdlist[i].args[0][0] == '.' 
-                && !cmdlist[i].args[0][1] == '/'){ 
-            strcpy(buffer, "/bin/");}
+                    && !cmdlist[i].args[0][1] == '/'){ 
+                strcpy(buffer, "/bin/");}
             strcat(buffer,cmdlist[i].args[0]);
             int result = Execvp(buffer, cmdlist[i].args); 
             exit(0);
         }
         pids[i] = pid;
     }
-    for(i = 0; i < sizeof(pids); i ++)
-    {
-        int status;
-        Waitpid(pids[i], &status, 0);
+    int state;
+    state = bg == 0 ? FG : BG;
+    int pgrp =  pids[cmdCnt - 1];
+    addJob(pids, pgrp, state, job, jobs);
+    int jid = pid2jid(pgrp,jobs);
+    if(bg == 1){
+        printf("[%d] %d\n", jid, pgrp);
+        return;
     }
+        for(i = 0; i < sizeof(pids); i ++)
+        {
+            int status;
+            Waitpid(pids[i], &status, 0);
+        }
 }
 
 
