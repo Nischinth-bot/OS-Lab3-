@@ -109,6 +109,8 @@ void evalJob(char * job, int bg)
     for (i = 0; i <  cmdCnt; i ++) {
         int pid = Fork();
         if (pid == 0) {
+            if(i == 0) setpgid(0,0);
+            else setpgid(0,pids[0]);
             char buffer[50];
             if(!cmdlist[i].args[0][0] == '.' 
                     && !cmdlist[i].args[0][1] == '/'){ 
@@ -121,18 +123,19 @@ void evalJob(char * job, int bg)
     }
     int state;
     state = bg == 0 ? FG : BG;
-    int pgrp =  pids[cmdCnt - 1];
-    addJob(pids, pgrp, state, job, jobs);
-    int jid = pid2jid(pgrp,jobs);
+    int  lastProcess  =  pids[cmdCnt - 1];
+    addJob(pids, pids[0], state, job, jobs);
+    int jid = pid2jid(pids[0],jobs);
     if(bg == 1){
-        printf("[%d] %d\n", jid, pgrp);
-        return;
+        printf("[%d] %d\n", jid, lastProcess);
+        return;    
     }
-        for(i = 0; i < sizeof(pids); i ++)
-        {
-            int status;
-            Waitpid(pids[i], &status, 0);
-        }
+    for( i = 0; i < cmdCnt; i ++)
+    {
+        int status;
+        waitpid(pids[i], &status, 0);
+        deletePid(pids[i], jobs);
+    }
 }
 
 
@@ -167,8 +170,19 @@ int builtin(char * job)
             return 1;
         }
         if (strcmp(cmdlist[i].args[0], "kill") == 0) {
-            int result = Execvp(cmdlist[i].args[0], cmdlist[i].args);
-            //kill(SIGKILL, pids[i]):
+            int signal;
+            int pid;
+            if(cmdlist[i].args[2][0] == '%'){
+                int jid = atoi(&cmdlist[i].args[2][1]);
+                jobT* job = getJobJid(jid, jobs); 
+                pid = job->pgrp;
+            }
+            else pid = atoi(cmdlist[i].args[1]);
+            if(strcmp(cmdlist[i].args[0], "-9") == 0){
+                signal = SIGKILL;
+            }
+            else signal = SIGINT;
+            kill(pid,signal);
             return 1;
         }
         return 0;
@@ -205,6 +219,8 @@ void waitfg()
  */
 void sigchildHandler(int sig)
 {
+    int status;
+    int pid = waitpid(-1, &status, WNOHANG);
 }
 
 /*
