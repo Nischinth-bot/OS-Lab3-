@@ -129,7 +129,7 @@ void evalJob(char * job, int bg)
     if(bg == 1){
         printf("[%d] %d\n", jid, lastProcess);
         return;    
-    }
+    } else { waitfg(); }
 }
 
 
@@ -179,7 +179,8 @@ int builtin(char * job)
                 }
                 return 1;
             }
-            pid = atoi(&cmdlist[i].args[2][0]);
+            if(cmdlist[i].args[2][0] == '-') pid = atoi(&cmdlist[i].args[2][1]);
+            else pid = atoi(&cmdlist[i].args[2][1]);
             kill(pid,signal);
             return 1;
         }
@@ -223,12 +224,16 @@ void sigchildHandler(int sig)
     if(pid != -1){
         int jid = pid2jid(pid,jobs);
         jobT* job = getJobJid(jid, jobs);
+        int state = job->state;
         char buffer[MAXLINE];
         strncpy(buffer,jobs->cmdline,MAXLINE - 1);
         int result = deletePid(pid, jobs);
-        if(result == 1){
+        if(result == 1 && state == BG){
             if(!WIFEXITED(status)){
-                printf("[%d] Killed  \t%s\n", jid, buffer);
+                printf("[%d] killed  \t%s\n", jid, buffer);
+            }else
+            {
+                printf("[%d] done \t %s\n", jid, buffer);
             }
         }
     }
