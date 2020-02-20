@@ -130,12 +130,6 @@ void evalJob(char * job, int bg)
         printf("[%d] %d\n", jid, lastProcess);
         return;    
     }
-    for( i = 0; i < cmdCnt; i ++)
-    {
-        int status;
-        waitpid(pids[i], &status, 0);
-        deletePid(pids[i], jobs);
-    }
 }
 
 
@@ -170,18 +164,22 @@ int builtin(char * job)
             return 1;
         }
         if (strcmp(cmdlist[i].args[0], "kill") == 0) {
-            int signal;
-            int pid;
-            if(cmdlist[i].args[2][0] == '%'){
-                int jid = atoi(&cmdlist[i].args[2][1]);
-                jobT* job = getJobJid(jid, jobs); 
-                pid = job->pgrp;
-            }
-            else pid = atoi(cmdlist[i].args[1]);
+            int signal,pid;
             if(strcmp(cmdlist[i].args[0], "-9") == 0){
                 signal = SIGKILL;
             }
             else signal = SIGINT;
+
+            if(cmdlist[i].args[2][0] == '%'){
+                int j;
+                int jid = atoi(&cmdlist[i].args[2][1]);
+                jobT* job = getJobJid(jid, jobs); 
+                for(j = 0; j < MAXPIDS; j ++){
+                    if(job->pid[j] != 0) kill(job->pid[j],signal);
+                }
+                return 1;
+            }
+            pid = atoi(&cmdlist[i].args[2][0]);
             kill(pid,signal);
             return 1;
         }
@@ -220,7 +218,20 @@ void waitfg()
 void sigchildHandler(int sig)
 {
     int status;
-    int pid = waitpid(-1, &status, WNOHANG);
+    int pid = 0;
+    while(pid == 0){pid = waitpid(-1, &status, WNOHANG);}
+    if(pid != -1){
+        int jid = pid2jid(pid,jobs);
+        jobT* job = getJobJid(jid, jobs);
+        char buffer[MAXLINE];
+        strncpy(buffer,jobs->cmdline,MAXLINE - 1);
+        int result = deletePid(pid, jobs);
+        if(result == 1){
+            if(!WIFEXITED(status)){
+                printf("[%d] Killed  \t%s\n", jid, buffer);
+            }
+        }
+    }
 }
 
 /*
