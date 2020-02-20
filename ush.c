@@ -104,6 +104,10 @@ void evalJob(char * job, int bg)
      * SIGINT and SIGCHLD signals.  This will allow you to 
      * add the job to the job list before those signals are handled.
      */
+    sigset_t mask, prev_mask;
+    Sigemptyset(&mask);
+    Sigaddset(&mask, SIGINT);
+    Sigprocmask(SIG_BLOCK, &mask, &prev_mask);
     int i;
     char* args = "";
     for (i = 0; i <  cmdCnt; i ++) {
@@ -130,6 +134,8 @@ void evalJob(char * job, int bg)
         printf("[%d] %d\n", jid, lastProcess);
         return;    
     } else { waitfg(); }
+
+    Sigprocmask(SIG_SETMASK, &prev_mask, NULL);
 }
 
 
@@ -180,7 +186,7 @@ int builtin(char * job)
                 return 1;
             }
             if(cmdlist[i].args[2][0] == '-') pid = atoi(&cmdlist[i].args[2][1]);
-            else pid = atoi(&cmdlist[i].args[2][1]);
+            else pid = atoi(&cmdlist[i].args[2][0]);
             kill(pid,signal);
             return 1;
         }
@@ -253,9 +259,10 @@ void sigintHandler(int sig)
         if(jobs[i].state == FG){
             int j;
             for (j = 0; j < MAXPIDS; j ++) {
-                kill(SIGINT, jobs[i].pid[j]);
+                kill(jobs[i].pid[j], SIGINT);
             }
         }
     }
+    fflush(NULL);
 }
 
