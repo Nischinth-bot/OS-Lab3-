@@ -104,12 +104,9 @@ void evalJob(char * job, int bg)
      * SIGINT and SIGCHLD signals.  This will allow you to 
      * add the job to the job list before those signals are handled.
      */
-    sigset_t mask, prev_mask;
-    Sigemptyset(&mask);
-    Sigaddset(&mask, SIGINT);
-    Sigprocmask(SIG_BLOCK, &mask, &prev_mask);
     int i;
-    char* args = "";
+    int fd[2];
+    pipe(fd); 
     for (i = 0; i <  cmdCnt; i ++) {
         int pid = Fork();
         if (pid == 0) {
@@ -120,11 +117,28 @@ void evalJob(char * job, int bg)
                     && !cmdlist[i].args[0][1] == '/'){ 
                 strcpy(buffer, "/bin/");}
             strcat(buffer,cmdlist[i].args[0]);
-            int result = Execvp(buffer, cmdlist[i].args); 
+            if(cmdCnt > 1){
+                if(i == 0){
+                    dup2(fd[1],1);
+                    close(fd[1]);
+                    close(fd[0]);
+                    Execvp(buffer, cmdlist[i].args);
+                    exit(0);
+                }else{
+                    dup2(fd[0], 0);
+                    close(fd[0]);
+                    close(fd[1]);
+                    Execvp(buffer, cmdlist[i].args);
+                    exit(0);
+                }
+            }
+            Execvp(buffer, cmdlist[i].args); 
             exit(0);
         }
         pids[i] = pid;
     }
+    close(fd[0]);
+    close(fd[1]);
     int state;
     state = bg == 0 ? FG : BG;
     int  lastProcess  =  pids[cmdCnt - 1];
@@ -133,9 +147,7 @@ void evalJob(char * job, int bg)
     if(bg == 1){
         printf("[%d] %d\n", jid, lastProcess);
         return;    
-    } else { waitfg(); }
-
-    Sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+    } waitfg(); 
 }
 
 
