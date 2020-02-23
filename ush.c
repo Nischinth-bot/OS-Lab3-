@@ -13,7 +13,7 @@ void evalJob(char * job, int bg);
 int builtin(char * job); 
 
 /**HELPER METHODS**/
-
+void closeAllOthers(int i, int cmdCnt, int fds[cmdCnt - 1][2]);
 
 /* The main drives the shell process.  Basically a shell reads
  * input, handles the input by executing a command in the foreground
@@ -104,9 +104,13 @@ void evalJob(char * job, int bg)
      * SIGINT and SIGCHLD signals.  This will allow you to 
      * add the job to the job list before those signals are handled.
      */
-    int i;
-    int fd[2];
-    pipe(fd); 
+    int i,j;
+    int fd[cmdCnt - 1][2];
+    if(cmdCnt > 1){
+        for(j = 0; j < cmdCnt ; j ++){
+            pipe(fd[j]); 
+        }
+    }
     for (i = 0; i <  cmdCnt; i ++) {
         int pid = Fork();
         if (pid == 0) {
@@ -117,28 +121,36 @@ void evalJob(char * job, int bg)
                     && !cmdlist[i].args[0][1] == '/'){ 
                 strcpy(buffer, "/bin/");}
             strcat(buffer,cmdlist[i].args[0]);
-            if(cmdCnt > 1){
+            if(cmdCnt > 1){     
+                closeAllOthers(i,cmdCnt,fd);
                 if(i == 0){
-                    dup2(fd[1],1);
-                    close(fd[1]);
-                    close(fd[0]);
+                    close(fd[i][0]); //close read end
+                    dup2(fd[i][1],1); // fd[i][1] becomes std out
+                    close(fd[i][1]); //close
                     Execvp(buffer, cmdlist[i].args);
                     exit(0);
                 }else{
-                    dup2(fd[0], 0);
-                    close(fd[0]);
-                    close(fd[1]);
+                    dup2(fd[i- 1][0], 0);
+                    close(fd[i -1][0]);
+                    if(i != cmdCnt - 1) dup2(fd[i][1], 1);
+                    close(fd[i][1]);
                     Execvp(buffer, cmdlist[i].args);
                     exit(0);
                 }
             }
+
             Execvp(buffer, cmdlist[i].args); 
             exit(0);
         }
+
         pids[i] = pid;
     }
-    close(fd[0]);
-    close(fd[1]);
+    if(cmdCnt > 1){
+        for(j = 0; j < cmdCnt ; j ++){
+            close(fd[j][0]); 
+            close(fd[j][1]);
+        }
+    }
     int state;
     state = bg == 0 ? FG : BG;
     int  lastProcess  =  pids[cmdCnt - 1];
@@ -245,7 +257,7 @@ void sigchildHandler(int sig)
         int state = job->state;
         char buffer[MAXLINE];
         strncpy(buffer,jobs->cmdline,MAXLINE - 1);
-        int result = deletePid(pid, jobs);
+        int result = deletePid(pid,jobs);
         if(result == 1 && state == BG){
             if(!WIFEXITED(status)){
                 printf("[%d] killed  \t%s\n", jid, buffer);
@@ -276,5 +288,17 @@ void sigintHandler(int sig)
         }
     }
     fflush(NULL);
+}
+
+
+void closeAllOthers(int i, int cmdCnt, int fds[cmdCnt - 1][2])
+{
+    int j;
+    for(j = 0; j < cmdCnt; j ++){
+        if(i != j){
+            close(fds[j][0]);
+            close(fds[j][1]);
+        }
+    }
 }
 
