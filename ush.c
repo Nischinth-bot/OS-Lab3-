@@ -122,21 +122,21 @@ void evalJob(char * job, int bg)
                 strcpy(buffer, "/bin/");}
             strcat(buffer,cmdlist[i].args[0]);
             if(cmdCnt > 1){     
-                closeAllOthers(i,cmdCnt,fd);
+                //if(i == 0 || i == cmdCnt - 1) closeAllOthers(i,cmdCnt,fd);
                 if(i == 0){
                     close(fd[i][0]); //close read end
-                    dup2(fd[i][1],1); // fd[i][1] becomes std out
-                    close(fd[i][1]); //close
+                    dup2(fd[i][1],1); //fd 1 now points to file of fd[i][1], ie, fd 3
+                    close(fd[i][1]); //close fd 3 since 1 points to the same location anyway
                     Execvp(buffer, cmdlist[i].args);
                     exit(0);
-                }else{
-                    dup2(fd[i- 1][0], 0);
-                    close(fd[i -1][0]);
-                    if(i != cmdCnt - 1) dup2(fd[i][1], 1);
-                    close(fd[i][1]);
+                }else if (i == cmdCnt - 1){
+                    dup2(fd[i-1][0],0);
+                    close(fd[i-1][1]);
+                    close(fd[i-1][0]); 
                     Execvp(buffer, cmdlist[i].args);
                     exit(0);
                 }
+                
             }
 
             Execvp(buffer, cmdlist[i].args); 
