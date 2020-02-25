@@ -13,7 +13,7 @@ void evalJob(char * job, int bg);
 int builtin(char * job); 
 
 /**HELPER METHODS**/
-
+void closeAllOthers(int i, int cmdCnt, int fds[cmdCnt - 1][2]);
 
 /* The main drives the shell process.  Basically a shell reads
  * input, handles the input by executing a command in the foreground
@@ -104,12 +104,18 @@ void evalJob(char * job, int bg)
      * SIGINT and SIGCHLD signals.  This will allow you to 
      * add the job to the job list before those signals are handled.
      */
-    /**sigset_t mask, prev_mask;
-    Sigemptyset(&mask);
-    Sigaddset(&mask, SIGINT);
-    Sigprocmask(SIG_BLOCK, &mask, &prev_mask);**/
-    int i;
-    char* args = "";
+
+    /**  sigset_t mask, prev_mask;
+      Sigemptyset(&mask);
+      Sigaddset(&mask, SIGINT);
+      Sigprocmask(SIG_BLOCK, &mask, &prev_mask); **/
+    int i,j;
+    int fd[cmdCnt - 1][2];
+    if(cmdCnt > 1){
+        for(j = 0; j < cmdCnt ; j ++){
+            pipe(fd[j]); 
+        }
+    }
     for (i = 0; i <  cmdCnt; i ++) {
         int pid = Fork();
         if (pid == 0) {
@@ -120,13 +126,59 @@ void evalJob(char * job, int bg)
                     && !cmdlist[i].args[0][1] == '/'){ 
                 strcpy(buffer, "/bin/");}
             strcat(buffer,cmdlist[i].args[0]);
-            int result = Execvp(buffer, cmdlist[i].args); 
+            if(cmdCnt > 1){     
+                if(i == 0){
+                    closeAllOthers(i,cmdCnt,fd);
+                    close(fd[i][0]); //close read end
+                    dup2(fd[i][1],1); //fd 1 now points to file of fd[i][1], ie, fd 3
+                    close(fd[i][1]); //close fd 3 since 1 points to the same location anyway
+                    Execvp(buffer, cmdlist[i].args);
+                    exit(0);
+                }
+                else if (i == cmdCnt - 1){
+                    closeAllOthers(i - 1, cmdCnt, fd); 
+                    dup2(fd[i-1][0],0);
+                    close(fd[i-1][1]);
+                    close(fd[i-1][0]); 
+                    Execvp(buffer, cmdlist[i].args);
+                    exit(0);
+                }
+                else 
+                {
+                    int j;
+
+                    for(j = 0; j < cmdCnt; j ++){
+                        if(j != i && j != i - 1){
+                            close(fd[j][0]);
+                            close(fd[j][1]);
+                        }
+                    }
+                    dup2(fd[i-1][0],0);
+                    dup2(fd[i][1],1);
+                    close(fd[i-1][0]);
+                    close(fd[i-1][1]);
+                    close(fd[i][1]);
+                    close(fd[i][0]);
+                    Execvp(buffer, cmdlist[i].args);
+                    exit(0);
+                }
+
+            }
+
+            Execvp(buffer, cmdlist[i].args); 
             exit(0);
         }
+
         pids[i] = pid;
     }
 
     //Sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+    if(cmdCnt > 1){
+        for(j = 0; j < cmdCnt ; j ++){
+            close(fd[j][0]); 
+            close(fd[j][1]);
+        }
+    }
     int state;
     state = bg == 0 ? FG : BG;
     int  lastProcess  =  pids[cmdCnt - 1];
@@ -135,8 +187,7 @@ void evalJob(char * job, int bg)
     if(bg == 1){
         printf("[%d] %d\n", jid, lastProcess);
         return;    
-    } else { waitfg(); }
-
+    } waitfg();
 }
 
 
@@ -170,26 +221,26 @@ int builtin(char * job)
             listJobs(jobs);
             return 1;
         }
-        if (strcmp(cmdlist[i].args[0], "kill") == 0) {
-            int signal,pid;
-            if(strcmp(cmdlist[i].args[0], "-9") == 0){
-                signal = SIGKILL;
-            }
-            else signal = SIGINT;
-
-            if(cmdlist[i].args[2][0] == '%'){
-                int j;
-                int jid = atoi(&cmdlist[i].args[2][1]);
-                jobT* job = getJobJid(jid, jobs); 
-                for(j = 0; j < MAXPIDS; j ++){
-                    if(job->pid[j] != 0) kill(job->pid[j],signal);
+        if (strcmp(cmdlist[i].args[0], "kill") == 0) { 
+                int signal,pid;
+                if(strcmp(cmdlist[i].args[0], "-9") == 0){
+                    signal = SIGKILL;
                 }
+                else signal = SIGINT;
+
+                if(cmdlist[i].args[2][0] == '%'){
+                    int j;
+                    int jid = atoi(&cmdlist[i].args[2][1]);
+                    jobT* job = getJobJid(jid, jobs); 
+                    for(j = 0; j < MAXPIDS; j ++){
+                        if(job->pid[j] != 0) kill(job->pid[j],signal);
+                    }
+                    return 1;
+                }
+                if(cmdlist[i].args[2][0] == '-') pid = atoi(&cmdlist[i].args[2][1]);
+                else pid = atoi(&cmdlist[i].args[2][0]);
+                kill(pid,signal);
                 return 1;
-            }
-            if(cmdlist[i].args[2][0] == '-') pid = atoi(&cmdlist[i].args[2][1]);
-            else pid = atoi(&cmdlist[i].args[2][0]);
-            kill(pid,signal);
-            return 1;
         }
         return 0;
     }
@@ -234,7 +285,7 @@ void sigchildHandler(int sig)
         int state = job->state;
         char buffer[MAXLINE];
         strncpy(buffer,jobs->cmdline,MAXLINE - 1);
-        int result = deletePid(pid, jobs);
+        int result = deletePid(pid,jobs);
         if(result == 1 && state == BG){
             if(!WIFEXITED(status)){
                 printf("[%d] killed  \t%s\n", jid, buffer);
@@ -265,5 +316,17 @@ void sigintHandler(int sig)
         }
     }
     fflush(NULL);
+}
+
+
+void closeAllOthers(int i, int cmdCnt, int fds[cmdCnt - 1][2])
+{
+    int j;
+    for(j = 0; j < cmdCnt; j ++){
+        if(i != j){
+            close(fds[j][0]);
+            close(fds[j][1]);
+        }
+    }
 }
 
